@@ -1,0 +1,10 @@
+.idea
+/Telegram bot for outline.iml
+__pycache__/*
+.venv
+
+/sql_data
+/sql/sql_commands.py
+Data.py
+/aiosqlite.py
+config.py
