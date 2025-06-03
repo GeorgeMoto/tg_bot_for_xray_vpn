@@ -1,10 +1,7 @@
 .idea
-/Telegram bot for outline.iml
+/tg_bot_bot_xray.iml
 __pycache__/*
 .venv
 
-/sql_data
-/sql/sql_commands.py
-Data.py
 /aiosqlite.py
 config.py
