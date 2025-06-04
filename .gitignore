@@ -1,7 +1,92 @@
-.idea
-/tg_bot_bot_xray.iml
-__pycache__/*
-.venv
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
-/aiosqlite.py
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Configuration files (ВАЖНО!)
 config.py
+.env
+.env.local
+.env.production
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+backup_*.db
+users_db.db
+copy_backup_db.db
+
+# Logs
+*.log
+logs/
+
+# Test files and temporary data
+test.py
+cookies.txt
+migration.py
+cleanup_database.py
+
+# System service files (содержат пути сервера)
+*.service
+tgbot.service
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific - удаленные файлы/директории
+dt_functions/
+sql/sql_commands.py
+
+# Backup files
+*.bak
+*.backup
+
+# PyCharm project files
+/tg_bot_bot_xray.iml
+*.iml
+
+# Deprecated files
+aiosqlite.py
