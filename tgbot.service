@@ -1,15 +1,24 @@
 [Unit]
-Description=Telegram Bot
-After=network.target
+Description=Support Telegram Bot
+After=network.target network-online.target
+Wants=network-online.target
 
 [Service]
-User=george
-Group=george
+Type=simple
+User=root
+Group=root
 
+WorkingDirectory=/home/george/support-bot
+Environment="PYTHONPATH=/home/george/support-bot"
+ExecStart=/home/george/support-bot/.venv/bin/python /home/george/support-bot/main.py
 
-WorkingDirectory=/home/george/Information-Telegram-Bot/
-Environment="PYTHONPATH=/home/george/Information-Telegram-Bot/"
-ExecStart=/home/george/Information-Telegram-Bot/.venv/bin/python /home/george/Information-Telegram-Bot/main.py
+Restart=always
+RestartSec=10
+MemoryMax=512M
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=support-bot
 
 [Install]
 WantedBy=multi-user.target

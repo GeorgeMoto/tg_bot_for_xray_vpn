@@ -1,11 +1,11 @@
 import aiosqlite as sqlite_async
 import datetime
 import calendar
+import shutil
 from contextlib import asynccontextmanager
 from typing import Optional, List, Tuple
 
 from config import PATH_TO_DB, PATH_TO_BACKUP_DB
-
 
 @asynccontextmanager
 async def get_db():
@@ -171,9 +171,20 @@ async def extend_user_subscription(user_id: int, days: int = 30):
 
 
 async def get_user_status(user_id: int) -> bool:
-    """Получение статуса подписки пользователя"""
+    """Получение РЕАЛЬНОГО статуса подписки пользователя"""
     user = await get_user_by_id(user_id)
-    return user['status'] == 1 if user else False
+    if not user or user['status'] == 0:
+        return False
+
+    # Проверяем дату окончания подписки
+    today = datetime.date.today().strftime('%Y-%m-%d')
+
+    # Если подписка истекла, автоматически деактивируем
+    if user['finish_date'] < today:
+        await deactivate_user(user_id)
+        return False
+
+    return True
 
 
 async def get_user_finish_date(user_id: int) -> Optional[str]:
@@ -237,7 +248,7 @@ async def get_expired_users() -> List[dict]:
 
     async with get_db() as db:
         async with db.execute("""
-                              SELECT id, client_uuid, username, first_name
+                              SELECT id, client_uuid, username, first_name, email_identifier
                               FROM users
                               WHERE status = 1
                                 AND finish_date < ?
@@ -248,7 +259,8 @@ async def get_expired_users() -> List[dict]:
                     'id': row[0],
                     'client_uuid': row[1],
                     'username': row[2],
-                    'first_name': row[3]
+                    'first_name': row[3],
+                    'email_identifier': row[4]
                 }
                 for row in rows
             ]
@@ -272,7 +284,6 @@ async def get_total_users_count() -> int:
 
 async def create_backup_db():
     """Создание резервной копии базы данных"""
-    import shutil
     try:
         shutil.copy2(PATH_TO_DB, PATH_TO_BACKUP_DB)
         print("✅ Резервная копия БД создана")
@@ -331,3 +342,4 @@ async def migrate_database():
         except:
             # Колонки уже существуют
             pass
+

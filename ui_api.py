@@ -147,47 +147,124 @@ async def delete_client_by_email(email_id):
         return False
 
 
-async def extend_client_subscription(email_id, days=30):
+async def extend_client_subscription(client_uuid, days=30):
     """
-    Продлевает подписку клиента на указанное количество дней
-    Используется при продлении подписки
+    Продлевает подписку клиента через прямые HTTP запросы к API панели
+    Обходит баг py3xui с endpoint updateClient
     """
     try:
-        api = await get_api()
+        print(f"🔍 Продлеваем подписку для UUID: {client_uuid}")
 
-        # Находим клиента по email
-        client = await api.client.get_by_email(email_id)
+        async with httpx.AsyncClient(verify=USE_TLS_VERIFY, timeout=30) as client:
+            # Авторизация
+            login_data = {
+                "username": API_USERNAME,
+                "password": API_PASSWORD
+            }
+            login_response = await client.post(f"{API_HOST}/login", data=login_data)
 
-        if not client:
-            print(f"❌ Клиент не найден: {email_id}")
-            return False
+            if login_response.status_code != 200:
+                print(f"❌ Ошибка авторизации: {login_response.status_code}")
+                return False
 
-        # Вычисляем новое время истечения
-        current_time = datetime.datetime.now()
-        if client.expiry_time and client.expiry_time > int(current_time.timestamp() * 1000):
-            # Если подписка еще активна, продлеваем от текущей даты истечения
-            current_expiry = datetime.datetime.fromtimestamp(client.expiry_time / 1000)
-            new_expiry_time = current_expiry + datetime.timedelta(days=days)
-        else:
-            # Если истекла, продлеваем от текущего времени
-            new_expiry_time = current_time + datetime.timedelta(days=days)
+            # Получение inbound с клиентами
+            inbound_response = await client.get(f"{API_HOST}/panel/api/inbounds/get/{INBOUND_ID}")
 
-        # Обновляем время истечения
-        client.expiry_time = int(new_expiry_time.timestamp() * 1000)
-        client.enable = True
+            if inbound_response.status_code != 200:
+                print(f"❌ Ошибка получения inbound: {inbound_response.status_code}")
+                return False
 
-        # Обновляем клиента
-        result = await api.client.update(client.id, client)
+            inbound_data = inbound_response.json()
 
-        if result:
-            print(f"✅ Подписка продлена для клиента: {email_id}")
-            return True
-        else:
-            print(f"❌ Ошибка продления подписки: {email_id}")
-            return False
+            if not inbound_data.get('success'):
+                print(f"❌ API вернул ошибку: {inbound_data}")
+                return False
+
+            # Парсинг настроек inbound
+            inbound_obj = inbound_data['obj']
+            settings = json.loads(inbound_obj.get('settings', '{}'))
+            clients = settings.get('clients', [])
+
+            print(f"🔍 Найдено клиентов в inbound: {len(clients)}")
+
+            # Поиск клиента по UUID
+            client_found = False
+            for i, client_data in enumerate(clients):
+                if client_data.get('id') == client_uuid:
+                    print(f"✅ Найден клиент с UUID: {client_uuid}")
+                    print(f"🔍 Email: {client_data.get('email')}")
+                    print(f"🔍 Текущий Expiry: {client_data.get('expiryTime')}")
+
+                    # Вычисляем новое время истечения
+                    current_time = datetime.datetime.now()
+                    current_expiry_ms = client_data.get('expiryTime', 0)
+
+                    if current_expiry_ms and current_expiry_ms > int(current_time.timestamp() * 1000):
+                        # Продлеваем от текущей даты истечения
+                        current_expiry = datetime.datetime.fromtimestamp(current_expiry_ms / 1000)
+                        new_expiry_time = current_expiry + datetime.timedelta(days=days)
+                    else:
+                        # Продлеваем от текущего времени
+                        new_expiry_time = current_time + datetime.timedelta(days=days)
+
+                    new_expiry_ms = int(new_expiry_time.timestamp() * 1000)
+
+                    # Обновляем клиента
+                    clients[i]['expiryTime'] = new_expiry_ms
+                    clients[i]['enable'] = True
+
+                    print(f"🔍 Новое время истечения: {new_expiry_time}")
+                    print(f"🔍 Новый Expiry timestamp: {new_expiry_ms}")
+
+                    client_found = True
+                    break
+
+            if not client_found:
+                print(f"❌ Клиент с UUID {client_uuid} не найден в настройках inbound")
+                return False
+
+            # Подготавливаем данные для обновления inbound
+            settings['clients'] = clients
+
+            update_data = {
+                'id': INBOUND_ID,
+                'remark': inbound_obj.get('remark', ''),
+                'enable': inbound_obj.get('enable', True),
+                'expiryTime': inbound_obj.get('expiryTime', 0),
+                'listen': inbound_obj.get('listen', ''),
+                'port': inbound_obj.get('port'),
+                'protocol': inbound_obj.get('protocol'),
+                'settings': json.dumps(settings),
+                'streamSettings': inbound_obj.get('streamSettings', ''),
+                'tag': inbound_obj.get('tag', ''),
+                'sniffing': inbound_obj.get('sniffing', ''),
+                'allocate': inbound_obj.get('allocate', ''),
+            }
+
+            print(f"🔍 Отправляем обновление inbound...")
+
+            # Обновляем inbound
+            update_response = await client.post(f"{API_HOST}/panel/api/inbounds/update/{INBOUND_ID}", json=update_data)
+
+            print(f"🔍 Статус ответа: {update_response.status_code}")
+
+            if update_response.status_code == 200:
+                response_data = update_response.json()
+                if response_data.get('success'):
+                    print(f"✅ Подписка продлена для клиента: {client_uuid}")
+                    return True
+                else:
+                    print(f"❌ API вернул ошибку при обновлении: {response_data}")
+                    return False
+            else:
+                print(f"❌ Ошибка HTTP при обновлении: {update_response.status_code}")
+                print(f"❌ Ответ: {update_response.text}")
+                return False
 
     except Exception as e:
-        print(f"❌ Ошибка продления подписки {email_id}: {e}")
+        print(f"❌ Ошибка продления подписки {client_uuid}: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -236,73 +313,3 @@ async def generate_vless_config(client_uuid, email):
         return f"vless://{client_uuid}@server-ip:443/?type=tcp&security=none#{email}"
 
 
-async def test_xui_connection():
-    """Проверка доступности панели XUI"""
-    try:
-        print(f"🔗 Подключаемся к: {API_HOST}")
-        print(f"🔐 SSL проверка: {'включена' if USE_TLS_VERIFY else 'отключена'}")
-
-        api = await get_api()
-        inbound = await api.inbound.get_by_id(INBOUND_ID)
-
-        if inbound:
-            print(f"✅ Найден inbound ID {INBOUND_ID}:")
-            print(f"   Протокол: {inbound.protocol}")
-            print(f"   Порт: {inbound.port}")
-            print(f"   Клиентов: {len(inbound.settings.clients) if inbound.settings.clients else 0}")
-            return True
-        else:
-            print(f"❌ Inbound с ID {INBOUND_ID} не найден")
-            return False
-
-    except Exception as e:
-        print(f"❌ Ошибка подключения: {e}")
-        return False
-
-
-# Функция для тестирования
-async def test_xui_functions():
-    """Тестирование основных функций для бота"""
-    print("🔍 Тестирование упрощенных XUI функций...")
-
-    # Тест подключения
-    if not await test_xui_connection():
-        print("❌ Тест не пройден: нет подключения к XUI")
-        return False
-
-    # Тест создания клиента на 30 дней
-    test_user_id = 999999999
-    test_username = "test_user"
-    test_first_name = "Test"
-
-    client_uuid, email_id, vless_url = await create_vless_client(
-        test_user_id, test_username, test_first_name, 30  # 30 дней
-    )
-
-    if client_uuid and email_id and vless_url:
-        print(f"✅ Тестовый клиент создан на 30 дней")
-        print(f"Email: {email_id}")
-        print(f"VLESS: {vless_url[:80]}...")
-
-        # Тест продления на 30 дней
-        if await extend_client_subscription(email_id, 30):
-            print("✅ Тест продления прошел")
-
-        # Удаляем тестового клиента
-        if await delete_client_by_email(email_id):
-            print("✅ Тестовый клиент удален")
-    else:
-        print("❌ Не удалось создать тестового клиента")
-
-    print("✅ Все тесты завершены")
-    return True
-
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(test_xui_functions())
-    except ImportError as e:
-        print(f"❌ Ошибка импорта: {e}")
-        print("Установите библиотеку: pip install py3xui")
-    except Exception as e:
-        print(f"❌ Общая ошибка: {e}")

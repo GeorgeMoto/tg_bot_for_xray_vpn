@@ -199,6 +199,6 @@
 
 ---
 
-# Информация о настройке маршрутизации взята из данного [репозитория](https://github.com/EmptyLibra/Configure-Xray-with-VLESS-Reality-on-VPS-server/tree/master)
+Информация о настройке маршрутизации взята из данного [репозитория](https://github.com/EmptyLibra/Configure-Xray-with-VLESS-Reality-on-VPS-server/tree/master)
 
 
