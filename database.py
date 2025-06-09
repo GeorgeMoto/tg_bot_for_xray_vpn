@@ -205,9 +205,16 @@ async def get_payment_notice_date(user_id: int) -> Optional[str]:
 
 
 async def deactivate_user(user_id: int):
-    """Деактивация пользователя"""
+    """Деактивация пользователя с полной очисткой VPN данных"""
     async with get_db() as db:
-        await db.execute("UPDATE users SET status = 0 WHERE id = ?", (user_id,))
+        await db.execute("""
+            UPDATE users 
+            SET status = 0,
+                client_uuid = NULL,
+                email_identifier = NULL,
+                vless_config = NULL
+            WHERE id = ?
+        """, (user_id,))
         await db.commit()
 
 
@@ -300,16 +307,8 @@ async def get_user_config(user_id: int) -> Optional[str]:
 
 
 async def delete_user_config(user_id: int):
-    """Удаление конфигурации пользователя (при полном удалении)"""
-    async with get_db() as db:
-        await db.execute("""
-                         UPDATE users
-                         SET vless_config = NULL,
-                             client_uuid  = NULL,
-                             status       = 0
-                         WHERE id = ?
-                         """, (user_id,))
-        await db.commit()
+    """Удаление конфигурации пользователя (теперь дублирует deactivate_user)"""
+    await deactivate_user(user_id)
 
 
 # Функция для миграции старой БД к новой структуре
