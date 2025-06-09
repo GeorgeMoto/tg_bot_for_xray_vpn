@@ -61,7 +61,7 @@ cleanup_database.py
 
 # System service files (содержат пути сервера)
 *.service
-tgbot.service
+tg_bot_xray.service
 
 # Temporary files
 *.tmp
