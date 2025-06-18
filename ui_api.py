@@ -335,60 +335,61 @@ async def extend_client_subscription(client_uuid, days=30):
 
 
 async def generate_vless_config_direct(inbound_obj, client_uuid, email):
-    """Генерирует VLESS конфигурационную ссылку напрямую из данных inbound"""
+    """
+    Генерирует ПРАВИЛЬНУЮ VLESS ссылку с Public Key
+    Использует точный путь: realitySettings -> settings -> publicKey
+    """
     try:
+        # Получаем streamSettings из inbound
+        stream_settings_str = inbound_obj.get('streamSettings', '{}')
+        stream_settings = json.loads(stream_settings_str) if stream_settings_str else {}
+
         # Извлекаем IP из host
         ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+)', API_HOST)
         server_ip = ip_match.group(1) if ip_match else 'server-ip'
 
-        # Получаем настройки из inbound
-        port = inbound_obj.get('port')
-        protocol = inbound_obj.get('protocol')
+        # Получаем порт
+        port = inbound_obj.get('port', 443)
 
-        # Парсим streamSettings
-        stream_settings_str = inbound_obj.get('streamSettings', '{}')
-        stream_settings = json.loads(stream_settings_str) if stream_settings_str else {}
+        # Получаем Reality настройки по ТОЧНОМУ пути
+        reality_settings = stream_settings.get('realitySettings', {})
+        settings = reality_settings.get('settings', {})
 
-        network = stream_settings.get('network', 'tcp')
-        security = stream_settings.get('security', 'none')
+        # Получаем Public Key по точному пути
+        public_key = settings.get('publicKey')
 
-        # Формируем базовую VLESS ссылку БЕЗ хэша
-        vless_url = f"vless://{client_uuid}@{server_ip}:{port}?type={network}&security={security}"
+        if not public_key:
+            print(f"❌ Public Key не найден по пути: realitySettings.settings.publicKey")
+            return None
 
-        # Если используется reality, добавляем дополнительные параметры
-        if security == "reality":
-            reality_settings = stream_settings.get('realitySettings', {})
-            if reality_settings:
-                public_key = reality_settings.get("publicKey", "")
-                server_names = reality_settings.get("serverNames", [])
-                short_ids = reality_settings.get("shortIds", [])
+        # Получаем другие параметры
+        server_names = reality_settings.get('serverNames', [])
+        short_ids = reality_settings.get('shortIds', [])
 
-                # Добавляем публичный ключ (pbk) - это самый важный параметр!
-                if public_key:
-                    vless_url += f"&pbk={public_key}"
+        print(f"✅ Public Key найден: {public_key}")
 
-                # Добавляем fingerprint (используем chrome вместо firefox)
-                vless_url += "&fp=chrome"
+        # Формируем VLESS ссылку
+        vless_url = f"vless://{client_uuid}@{server_ip}:{port}?type=tcp&security=reality"
+        vless_url += f"&pbk={public_key}"  # Публичный ключ
+        vless_url += "&fp=chrome"  # Fingerprint
 
-                # Добавляем server name indication
-                if server_names:
-                    vless_url += f"&sni={server_names[0]}"
+        if server_names:
+            vless_url += f"&sni={server_names[0]}"  # Server Name Indication
 
-                # Добавляем short ID
-                if short_ids:
-                    vless_url += f"&sid={short_ids[0]}"
+        if short_ids:
+            vless_url += f"&sid={short_ids[0]}"  # Short ID
 
-                # Добавляем spider X (путь)
-                vless_url += "&spx=%2F"
+        vless_url += "&spx=%2F"  # Spider X
+        vless_url += f"#{email}"  # Email в конце
 
-        # Добавляем хэш с email В КОНЦЕ
-        vless_url += f"#{email}"
-
-        print(f"✅ VLESS конфигурация сгенерирована: {vless_url}")
+        print(f"✅ VLESS ссылка сгенерирована")
         return vless_url
 
     except Exception as e:
-        print(f"❌ Ошибка генерации VLESS конфигурации: {e}")
+        print(f"❌ Ошибка генерации VLESS ссылки: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 
 
